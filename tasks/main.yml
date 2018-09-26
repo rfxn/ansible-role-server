@@ -1,9 +1,12 @@
 ---
 
+- include: epel-override.yml
+  when: server_epel_override
+
 - name: Set the Hostname
   hostname:
     name="{{ inventory_hostname }}"
-  ignore_errors: "yes"
+  failed_when: false
   tags:
     - environment
     - hostname
@@ -23,10 +26,17 @@
     name="{{ item }}"
     state="present"
     disablerepo="*"
-    enablerepo="epel,base,updates,nexcess,extras"
+    enablerepo="epel,remi,base,updates,extras"
     skip_broken=yes
     update_cache=yes
   with_items: "{{ server_packages + server_extra_packages }}"
+  tags:
+    - packages
+    - extras
+
+- name: Install shyaml
+  pip:
+    name="shyaml"
   tags:
     - packages
     - extras
@@ -41,6 +51,33 @@
     - security
     - selinux
     - selinux-enforcing
+
+- name: Disable SELinux
+  selinux:
+    state="disabled"
+  when: not server_selinux_enforcing
+  tags:
+    - environment
+    - security
+    - selinux
+    - selinux-enforcing
+
+# gnarly regex looks for rootfs (of any fs type) that doesn't already
+#  have noatime appended, special regex stuff is:
+#   \s is any whitespace char
+#   \S is any non-whitespace char
+#   \w is any alphanumeric + _ (underscore)
+#   (?!thing) is a negative lookahead assertion
+#  this assumes that "defaults" is always the first mount option for rootfs
+- name: Set noatime on filesystems
+  lineinfile:
+    dest="/etc/fstab"
+    regexp="^([^#].*\s+/\s+\w+\s+)(defaults(?!\S+noatime)\S+)(\s+.*)$"
+    line="\1\2,noatime\3"
+    backrefs="yes"
+  tags:
+    - environment
+    - mounts
 
 - name: Turn Off Unused Services
   service:
@@ -70,6 +107,14 @@
     - kernel
     - kernel-sysctl
 
+- include: udev.yml
+  when: server_set_udev_rules
+  tags:
+    - environment
+    - resources
+    - kernel
+    - kernel-udev
+
 - name: Setup /etc/hosts
   template:
     src="etc/hosts.j2"
@@ -94,7 +139,9 @@
   shell: "ssh-keygen -f {{ server_ssh_known_hosts_file }} -F {{ item }}"
   with_items: "{{ server_ssh_known_hosts }}"
   register: server_ssh_known_host_results
-  ignore_errors: yes
+  # ignoring errors here since `Scan the Public Key' below will add any
+  # missing public key into {{ server_ssh_known_hosts_file }}
+  failed_when: false
   tags:
     - environment
     - ssh
@@ -126,8 +173,8 @@
 
 - name: Setup Bash History
   template:
-    src="etc/profile.d/history.j2"
-    dest="/etc/profile.d/history.sh"
+    src="etc/profile.d/shell_history.j2"
+    dest="/etc/profile.d/shell_history.sh"
     owner="root"
     group="root"
     mode="0644"
@@ -144,7 +191,7 @@
     state="stopped"
   when: firewall_included
   register: firewalld
-  ignore_errors: true
+  failed_when: false
   tags:
     - environment
     - bash
@@ -162,8 +209,11 @@
     - firewall
 
 - name: Update Base System
-  command: /bin/true
-  notify: server update
+  yum:
+    name=*
+    update_cache=yes
+    state=latest
+    skip_broken=yes
   when: server_update
   tags:
     - environment

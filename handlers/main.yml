@@ -1,4 +1,4 @@
 ---
 
-- name: server update
-  yum: name=* update_cache=yes state=latest skip_broken=yes
+- name: apply udev rules
+  command: /sbin/udevadm trigger --action=change

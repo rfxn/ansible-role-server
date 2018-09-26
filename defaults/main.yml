@@ -4,12 +4,15 @@
 backnet_host: "{{ inventory_hostname }}-int"
 
 # Base Deps
-kernelcare_included: true
+kernelcare_included: false
 epel_included: true
+remi_included: true
 
 # Server Defaults
-server_update: false
+server_update: true
 server_selinux_enforcing: false
+server_epel_override: true
+server_epel_mirror: "mirror.us-midwest-1.nexcess.net"
 server_packages:
   - "bash-completion"
   - "bind-utils"
@@ -45,6 +48,7 @@ server_packages:
   - "vim"
   - "bind-utils"
   - "s3cmd"
+  - "python-pip"
 server_extra_packages: []
 server_extra_path:
 server_services_unused: []
@@ -109,6 +113,13 @@ server_sysctl_10g:
   - key: "net.ipv4.tcp_moderate_rcvbuf"
     value: 1
 server_extra_sysctl: {}
+server_set_udev_rules: true
+server_udev_rules:
+  - key: 50-ioscheduler
+    value: |
+      KERNEL=="sd[a-z]", ATTR{queue/scheduler}="noop"
+      KERNEL=="sd[a-z]", ATTR{queue/nr_requests}="256"
+server_extra_udev_rules: []
 server_ssh_known_hosts_command: "ssh-keyscan -H -T 10"
 server_ssh_known_hosts_file: "/etc/ssh/ssh_known_hosts"
 server_ssh_known_hosts:
@@ -119,9 +130,6 @@ server_bash_history: true
 # Firewall Defaults
 firewall_included: true
 
-# Set a default SSH firewall rule
-nexcess_firewall_cidr_blocks:
-  login_servers:
-    - '0.0.0.0/0'
-  office_and_vpn:
-    - '0.0.0.0/0'
+# Vagrant env vars
+vagrant_hostv4: "127.0.0.1"
+vagrant_hostv6: "::1/128"
